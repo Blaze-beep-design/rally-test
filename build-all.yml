@@ -1,0 +1,374 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Create project and game files
+        run: |
+          mkdir -p src/main/java/com/rally/test src/main/assets
+          cat > settings.gradle <<'EOF_SETTINGS'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = 'RallyTest'
+          EOF_SETTINGS
+          cat > build.gradle <<'EOF_BUILD'
+          plugins { id 'com.android.application' version '8.5.2' }
+          android {
+              namespace 'com.rally.test'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.rally.test'
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName '0.1'
+              }
+          }
+          EOF_BUILD
+          cat > src/main/AndroidManifest.xml <<'EOF_MANIFEST'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:label="Rally Test"
+                  android:allowBackup="false"
+                  android:hardwareAccelerated="true"
+                  android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="sensorLandscape"
+                      android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF_MANIFEST
+          cat > src/main/java/com/rally/test/MainActivity.java <<'EOF_JAVA'
+          package com.rally.test;
+
+          import android.app.Activity;
+          import android.graphics.Color;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+
+          public class MainActivity extends Activity {
+              private WebView web;
+
+              @Override
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                  if (Build.VERSION.SDK_INT >= 28) {
+                      WindowManager.LayoutParams lp = getWindow().getAttributes();
+                      lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                      getWindow().setAttributes(lp);
+                  }
+                  web = new WebView(this);
+                  web.setBackgroundColor(Color.BLACK);
+                  web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                  WebSettings s = web.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
+                  web.setWebViewClient(new WebViewClient());
+                  web.setWebChromeClient(new WebChromeClient());
+                  setContentView(web);
+                  web.loadUrl("file:///android_asset/index.html");
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean focus) {
+                  super.onWindowFocusChanged(focus);
+                  if (focus) {
+                      getWindow().getDecorView().setSystemUiVisibility(
+                          View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                          | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                  }
+              }
+
+              @Override protected void onPause() { super.onPause(); web.onPause(); }
+              @Override protected void onResume() { super.onResume(); web.onResume(); }
+              @Override protected void onDestroy() { web.destroy(); super.onDestroy(); }
+          }
+          EOF_JAVA
+          # >>>>>>>>>> GAME CODE (index.html) STARTS HERE <<<<<<<<<<
+          cat > src/main/assets/index.html <<'EOF_GAME'
+          <!DOCTYPE html>
+          <html lang="en"><head><meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+          <meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#000000">
+          <title>Rally Test</title>
+          <style>
+          html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:system-ui,sans-serif;color:#fff}
+          canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+          .ab{position:fixed}.hide{display:none!important}
+          #top{top:1.2vh;left:0;right:0;text-align:center;pointer-events:none}
+          #tm{font:700 6.5vh monospace;text-shadow:0 0 8px #000,0 0 3px #000}
+          #pen{display:inline-block;margin-left:2vh;font:700 5vh monospace;color:#ff3b2f;opacity:0;transition:opacity .4s;text-shadow:0 0 6px #000}
+          #note{top:11vh;left:50%;transform:translateX(-50%);padding:.8vh 2.4vh;background:rgba(0,0,0,.5);border-radius:1vh;color:#ffe9a8;font:600 3.6vh system-ui;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none}
+          #lights{top:15vh;left:50%;transform:translateX(-50%);pointer-events:none;white-space:nowrap}
+          #lights i{display:inline-block;width:6vh;height:6vh;margin:0 1vh;border-radius:50%;background:#2a0a0a;border:.5vh solid #000}
+          #lights i.r{background:#f21;box-shadow:0 0 2vh #f21}#lights i.g{background:#2f4;box-shadow:0 0 2vh #2f4}
+          .pad{position:fixed;border-radius:2vh;display:flex;align-items:center;justify-content:center;font:700 3.2vh system-ui;background:rgba(255,255,255,.14);border:.4vh solid rgba(255,255,255,.4);text-shadow:0 0 4px #000}
+          .pad.on{background:rgba(255,255,255,.38)}
+          #gas{right:3vw;bottom:5vh;width:17vw;height:38vh;background:rgba(40,200,80,.25)}
+          #brk{right:21vw;bottom:5vh;width:14vw;height:24vh;background:rgba(230,50,40,.25)}
+          #hb{right:21vw;bottom:31vh;width:14vw;height:13vh;background:rgba(255,150,20,.25)}
+          #steer{left:3vw;bottom:5vh;width:38vw;height:26vh;background:rgba(255,255,255,.08)}
+          #rail{position:absolute;left:8%;right:8%;top:50%;height:.8vh;margin-top:-.4vh;background:rgba(255,255,255,.35);border-radius:1vh}
+          #knob{position:absolute;top:50%;left:50%;width:11vh;height:11vh;margin:-5.5vh 0 0 -5.5vh;border-radius:50%;background:rgba(255,255,255,.5);border:.5vh solid #fff}
+          #menu{inset:0;background:linear-gradient(180deg,rgba(0,0,0,.65),rgba(0,0,0,.2));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh}
+          #menu h1{margin:0;font:900 12vh Impact,'Arial Narrow Bold',sans-serif;letter-spacing:.5vh;transform:skew(-8deg);text-shadow:.6vh .6vh 0 #d9540f}
+          #menu p{margin:0;font-size:3vh;opacity:.8}
+          #play{font:800 5vh system-ui;padding:1.6vh 10vh;border:0;border-radius:1.6vh;background:#d9540f;color:#fff}
+          #play:active{background:#ff7a2a}
+          #res{inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;background:rgba(0,0,0,.35);text-align:center}
+          #res b{font:900 11vh Impact,sans-serif;color:#ffe9a8}#res span{font:700 5vh monospace;line-height:1.4}
+          #rot{inset:0;z-index:99;background:#000;display:none;align-items:center;justify-content:center;font:700 4vw system-ui;text-align:center}
+          @media (orientation:portrait){#rot{display:flex}}
+          </style></head><body>
+          <canvas id="g"></canvas><canvas id="cock" class="hide"></canvas>
+          <div id="top" class="ab hide"><span id="tm">00:00.0</span><span id="pen"></span></div>
+          <div id="note" class="ab"></div>
+          <div id="lights" class="ab hide"><i></i><i></i><i></i></div>
+          <div id="steer" class="pad hide"><div id="rail"></div><div id="knob"></div></div>
+          <div id="gas" class="pad hide">GAS</div><div id="brk" class="pad hide">BRAKE</div><div id="hb" class="pad hide">HANDBRAKE</div>
+          <div id="res" class="ab hide"></div>
+          <div id="menu" class="ab"><h1>RALLY TEST</h1><p>Dev build 0.1 · hold landscape</p><button id="play">PLAY</button></div>
+          <div id="rot">Rotate your phone to landscape</div>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+          <script>
+          const $=id=>document.getElementById(id);
+          const R=new THREE.WebGLRenderer({canvas:$('g'),antialias:false});
+          const scene=new THREE.Scene();scene.background=new THREE.Color(0x9fb0b8);scene.fog=new THREE.Fog(0x9fb0b8,70,430);
+          const cam=new THREE.PerspectiveCamera(72,1,.1,600);
+          scene.add(new THREE.HemisphereLight(0xe6eef5,0x4a5a35,.95));
+          const sun=new THREE.DirectionalLight(0xffeedd,.7);sun.position.set(100,200,60);scene.add(sun);
+          const cx=$('cock'),c2=cx.getContext('2d');
+          function resize(){const w=innerWidth,h=innerHeight,r=Math.min(devicePixelRatio||1,2);R.setPixelRatio(r);R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();cx.width=w*r;cx.height=h*r}
+          addEventListener('resize',resize);resize();
+
+          /* ---------- TRACK ---------- */
+          const ctrl=[[0,0],[0,-220],[70,-400],[210,-470],[370,-420],[440,-290],[380,-170],[260,-110],[210,0],[270,110],[410,165],[570,130],[660,240],[630,390],[490,455],[340,435],[260,530],[290,650],[430,710],[560,700]].map(p=>new THREE.Vector3(p[0],0,p[1]));
+          const curve=new THREE.CatmullRomCurve3(ctrl,false,'centripetal');
+          const L=curve.getLength(),STEP=1.5,N=Math.floor(L/STEP),sp=curve.getSpacedPoints(N);
+          const PX=[],PZ=[],TX=[],TZ=[],BY=[],RP=[],Y=[];
+          for(let i=0;i<=N;i++){PX[i]=sp[i].x;PZ[i]=sp[i].z}
+          for(let i=0;i<=N;i++){const a=Math.max(0,i-1),b=Math.min(N,i+1);let x=PX[b]-PX[a],z=PZ[b]-PZ[a];const m=Math.hypot(x,z)||1;TX[i]=x/m;TZ[i]=z/m}
+          let pv=0;for(let i=0;i<=N;i++){let a=Math.atan2(-TX[i],-TZ[i]);if(i){while(a-pv>Math.PI)a-=2*Math.PI;while(a-pv<-Math.PI)a+=2*Math.PI}Y[i]=a;pv=a}
+          for(let i=0;i<=N;i++){const s=i*STEP;BY[i]=6*Math.sin(s*.0045)+3*Math.sin(s*.013+1)}
+          const b0=BY[0];for(let i=0;i<=N;i++)BY[i]-=b0;
+          // jumps: put them on the straightest bit near these fractions
+          const ramps=[.5,.78].map(f=>{let best=0,bv=9;const c=Math.floor(f*N);for(let i=c-120;i<c+120;i++){const v=Math.abs(Y[i+30]-Y[i-5]);if(v<bv){bv=v;best=i}}return best});
+          for(let i=0;i<=N;i++){let r=0;for(const rs of ramps){const u=(i-rs)*STEP;if(u>0&&u<16)r+=2.4*u/16;else if(u>=16&&u<18)r+=2.4*(1-(u-16)/2)}RP[i]=r}
+          const sm=(d,a,b)=>{const t=Math.min(1,Math.max(0,(d-a)/(b-a)));return t*t*(3-2*t)};
+          const nz=(x,z)=>Math.sin(x*.02)*Math.cos(z*.017)*9+Math.sin(x*.06+z*.045)*2.5+Math.cos(z*.035-x*.02)*3;
+          const terr=(x,z,i,d)=>BY[i]-.3+nz(x,z)*sm(d,7,50);
+          function ground(x,z,i,d){if(d<4.3)return BY[i]+RP[i];const t=terr(x,z,i,d);if(d<6.2){const u=(d-4.3)/1.9;return(BY[i]+RP[i])*(1-u)+t*u}return t}
+          function nearAll(x,z){let b=0,bd=1e12;for(let i=0;i<=N;i++){const dx=x-PX[i],dz=z-PZ[i],dd=dx*dx+dz*dz;if(dd<bd){bd=dd;b=i}}return[b,Math.sqrt(bd)]}
+          function near(x,z,h){let b=h,bd=1e12;const lo=Math.max(0,h-40),hi=Math.min(N,h+40);for(let i=lo;i<=hi;i++){const dx=x-PX[i],dz=z-PZ[i],dd=dx*dx+dz*dz;if(dd<bd){bd=dd;b=i}}return[b,Math.sqrt(bd)]}
+
+          /* terrain */
+          {let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9;for(let i=0;i<=N;i++){mnx=Math.min(mnx,PX[i]);mxx=Math.max(mxx,PX[i]);mnz=Math.min(mnz,PZ[i]);mxz=Math.max(mxz,PZ[i])}
+          mnx-=160;mxx+=160;mnz-=160;mxz+=160;const SX=100,SZ=100;
+          const g=new THREE.PlaneGeometry(mxx-mnx,mxz-mnz,SX,SZ);g.rotateX(-Math.PI/2);
+          const p=g.attributes.position,cols=new Float32Array(p.count*3),cx0=(mnx+mxx)/2,cz0=(mnz+mxz)/2;
+          for(let k=0;k<p.count;k++){const x=p.getX(k)+cx0,z=p.getZ(k)+cz0,[i,d]=nearAll(x,z);p.setXYZ(k,x,terr(x,z,i,d),z);
+          const n=Math.sin(x*.11)*Math.cos(z*.13)*.5+.5,dirt=1-sm(d,6,12);
+          cols[k*3]=(.30+.12*n)*(1-dirt)+.55*dirt;cols[k*3+1]=(.48+.1*n)*(1-dirt)+.42*dirt;cols[k*3+2]=(.22+.05*n)*(1-dirt)+.28*dirt}
+          g.setAttribute('color',new THREE.BufferAttribute(cols,3));g.computeVertexNormals();
+          scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true})))}
+
+          /* road */
+          {const v=[],c=[],ix=[];for(let i=0;i<=N;i++){const rx=-TZ[i],rz=TX[i],y=BY[i]+RP[i]+.06,sh=(Math.floor(i/6)%2)*.04;
+          for(const sd of[-1,1]){v.push(PX[i]+rx*4*sd,y,PZ[i]+rz*4*sd);c.push(.62+sh,.52+sh,.38+sh)}}
+          for(let i=0;i<N;i++){const a=2*i,b=a+1,cc=a+2,d=a+3;ix.push(a,b,cc,b,d,cc)}
+          const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));g.setIndex(ix);g.computeVertexNormals();
+          scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide})))}
+
+          /* poles + trees */
+          const D=new THREE.Object3D();
+          {const pole=new THREE.InstancedMesh(new THREE.BoxGeometry(.25,1.6,.25),new THREE.MeshLambertMaterial({color:0xff7a1a}),((N/8)+2|0)*2);let c=0;
+          for(let i=0;i<=N;i+=8)for(const sd of[-1,1]){const x=PX[i]-TZ[i]*sd*5.2,z=PZ[i]+TX[i]*sd*5.2;D.position.set(x,ground(x,z,i,5.2)+.8,z);D.updateMatrix();pole.setMatrixAt(c++,D.matrix)}
+          pole.count=c;scene.add(pole);
+          const tm=new THREE.InstancedMesh(new THREE.ConeGeometry(2,7,6).translate(0,3.5,0),new THREE.MeshLambertMaterial({color:0x2f5a2c}),900);let tc=0;
+          for(let k=0;k<3000&&tc<900;k++){const j=Math.floor(Math.random()*N),sd=Math.random()<.5?-1:1,o=12+Math.random()*70,x=PX[j]-TZ[j]*sd*o,z=PZ[j]+TX[j]*sd*o,[i,d]=nearAll(x,z);if(d<11)continue;
+          const s=.8+Math.random()*1.2;D.position.set(x,terr(x,z,i,d)-.2,z);D.scale.set(s,s*(1+Math.random()*.6),s);D.rotation.y=Math.random()*6;D.updateMatrix();tm.setMatrixAt(tc++,D.matrix)}
+          tm.count=tc;scene.add(tm)}
+
+          /* gates */
+          function chk(){const c=document.createElement('canvas');c.width=64;c.height=8;const x=c.getContext('2d');for(let i=0;i<16;i++)for(let j=0;j<2;j++){x.fillStyle=(i+j)%2?'#fff':'#111';x.fillRect(i*4,j*4,4,4)}const t=new THREE.CanvasTexture(c);t.magFilter=THREE.NearestFilter;return t}
+          function gate(i){const g=new THREE.Group(),pm=new THREE.MeshLambertMaterial({color:0xeeeeee});
+          [-4.8,4.8].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.5,6,.5),pm);p.position.set(x,3,0);g.add(p)});
+          const b=new THREE.Mesh(new THREE.BoxGeometry(10,1.2,.4),new THREE.MeshBasicMaterial({map:chk()}));b.position.set(0,6,0);g.add(b);
+          g.position.set(PX[i],BY[i]+RP[i],PZ[i]);g.rotation.y=Y[i];scene.add(g)}
+          const FIN=N-60;gate(4);gate(FIN);
+
+          /* crowd */
+          const crowd=[];
+          {const bg=new THREE.CylinderGeometry(.28,.3,1.1,6),hg=new THREE.SphereGeometry(.22,6,5),hm=new THREE.MeshLambertMaterial({color:0xe8c09a}),cl=[0xe63946,0x2a9d8f,0xf4a261,0x457b9d,0xffd166,0xeeeeee,0x8e5ac8];
+          [.1,.28,.5,.62,.78,.92].forEach(f=>{let si=Math.floor(f*N);if(f==.5||f==.78)si=ramps[f==.5?0:1]+6;const sp={i:si,done:0,p:[]};
+          for(let k=0;k<9;k++){const j=si+Math.floor(Math.random()*20-10),sd=Math.random()<.5?-1:1,o=7+Math.random()*5,x=PX[j]-TZ[j]*sd*o,z=PZ[j]+TX[j]*sd*o,y=ground(x,z,j,o);
+          const gr=new THREE.Group(),b=new THREE.Mesh(bg,new THREE.MeshLambertMaterial({color:cl[k%7]})),h=new THREE.Mesh(hg,hm);b.position.y=.55;h.position.y=1.35;gr.add(b,h);gr.position.set(x,y,z);scene.add(gr);sp.p.push({g:gr,y,ph:Math.random()*6})}
+          crowd.push(sp)})}
+
+          /* ---------- PACE NOTES ---------- */
+          const notes=[];
+          {const cs=[];let inC=0,st=0;for(let i=12;i<N-12;i++){const dy=Y[i+10]-Y[i-10];
+          if(!inC&&Math.abs(dy)>.2){inC=1;st=i}else if(inC&&Math.abs(dy)<.08){inC=0;const a=(Y[i]-Y[st-6])*57.3;if(Math.abs(a)>=28)cs.push({s:st-5,e:i,a})}}
+          const nm=c=>{const d=c.a>0?'left':'right',A=Math.abs(c.a);return A>110?d+' hairpin':A>70?'hard '+d:A>45?d+' medium':d+' easy'};
+          for(let k=0;k<cs.length;k++){let t=nm(cs[k]),e=cs[k].e,n=1;while(k+1<cs.length&&n<3&&cs[k+1].s-e<55){k++;t+=' into '+nm(cs[k]);e=cs[k].e;n++}notes.push({i:cs[k-n+1].s,t})}
+          ramps.forEach(r=>notes.push({i:r-8,t:'Jump! Keep it straight!'}));notes.push({i:FIN-120,t:'Finish ahead, flat out!'});notes.sort((a,b)=>a.i-b.i)}
+
+          /* ---------- STATE ---------- */
+          let S='menu',raceT=0,pen=0,penShow=0,pt,nt,noteI=0,offT=0,cT=0,finRT=0,ts=1,steerIn=0,kbS=0,shake=0,simT=0,topV=0;
+          const K={gas:0,brk:0,hb:0};
+          const car={x:0,z:0,y:0,vy:0,vx:0,vz:0,yaw:0,st:0,pitch:0,roll:0,i:10,pg:0,vf:0};
+          function reset(){car.i=10;car.x=PX[10];car.z=PZ[10];car.yaw=Y[10];car.vx=car.vz=car.vy=car.vf=0;car.st=car.pitch=car.roll=0;car.y=car.pg=ground(car.x,car.z,10,0);raceT=0;pen=0;noteI=0;offT=0;topV=0;crowd.forEach(c=>c.done=0)}
+          reset();
+          const fmt=t=>{const m=Math.floor(t/60),s=t-m*60;return String(m).padStart(2,'0')+':'+(s<10?'0':'')+s.toFixed(1)};
+          function say(t){t=t[0].toUpperCase()+t.slice(1);const n=$('note');n.textContent=t;n.style.opacity=1;clearTimeout(nt);nt=setTimeout(()=>n.style.opacity=0,3200);
+          try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.2;u.lang='en-GB';speechSynthesis.speak(u)}catch(e){}}
+          function addPen(a){pen+=a;penShow+=a;const e=$('pen');e.textContent='+'+penShow.toFixed(1);e.style.opacity=1;clearTimeout(pt);pt=setTimeout(()=>{e.style.opacity=0;penShow=0},1600)}
+
+          /* ---------- AUDIO ---------- */
+          let AC,eng,engG,nb;
+          function audio(){if(AC)return;try{AC=new(window.AudioContext||window.webkitAudioContext)();eng=AC.createOscillator();eng.type='sawtooth';const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=450;engG=AC.createGain();engG.gain.value=.03;eng.connect(lp);lp.connect(engG);engG.connect(AC.destination);eng.start()}catch(e){AC=null}}
+          function clap(n=26,len=1.8){if(!AC)return;if(!nb){nb=AC.createBuffer(1,2205,44100);const d=nb.getChannelData(0);for(let i=0;i<2205;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/350)}
+          for(let k=0;k<n;k++){const s=AC.createBufferSource();s.buffer=nb;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=1200+Math.random()*1800;const g=AC.createGain();g.gain.value=.25;s.connect(f);f.connect(g);g.connect(AC.destination);s.start(AC.currentTime+Math.random()*len)}}
+
+          /* ---------- INPUT ---------- */
+          [['gas','gas'],['brk','brk'],['hb','hb']].forEach(([id,k])=>{const e=$(id);
+          e.addEventListener('pointerdown',ev=>{ev.preventDefault();e.setPointerCapture(ev.pointerId);K[k]=1;e.classList.add('on')});
+          const up=()=>{K[k]=0;e.classList.remove('on')};e.addEventListener('pointerup',up);e.addEventListener('pointercancel',up)});
+          const stz=$('steer');let stId=null;
+          function sset(ev){const r=stz.getBoundingClientRect();steerIn=Math.max(-1,Math.min(1,((ev.clientX-r.left)/r.width-.5)*2.4))}
+          stz.addEventListener('pointerdown',ev=>{ev.preventDefault();stId=ev.pointerId;stz.setPointerCapture(stId);sset(ev)});
+          stz.addEventListener('pointermove',ev=>{if(ev.pointerId===stId)sset(ev)});
+          const sup=ev=>{if(ev.pointerId===stId){stId=null;steerIn=0}};stz.addEventListener('pointerup',sup);stz.addEventListener('pointercancel',sup);
+          addEventListener('contextmenu',e=>e.preventDefault());
+          const kmap={ArrowUp:'gas',w:'gas',ArrowDown:'brk',s:'brk',' ':'hb'};
+          addEventListener('keydown',e=>{if(kmap[e.key])K[kmap[e.key]]=1;if(e.key=='ArrowLeft'||e.key=='a')kbS=-1;if(e.key=='ArrowRight'||e.key=='d')kbS=1});
+          addEventListener('keyup',e=>{if(kmap[e.key])K[kmap[e.key]]=0;if(['ArrowLeft','a','ArrowRight','d'].includes(e.key))kbS=0});
+
+          /* ---------- FLOW ---------- */
+          const ui=(ids,on)=>ids.forEach(i=>$(i).classList.toggle('hide',!on));
+          $('play').onclick=()=>{audio();try{document.documentElement.requestFullscreen().then(()=>screen.orientation.lock('landscape').catch(()=>{})).catch(()=>{})}catch(e){}
+          reset();S='count';cT=0;ui(['menu','res'],0);ui(['cock','top','lights','steer','gas','brk','hb'],1);$('tm').textContent='00:00.0';
+          [...$('lights').children].forEach(l=>l.className='')};
+          function finish(){S='finish';finRT=0;const t=raceT+pen;clap(40,3);
+          $('res').innerHTML=`<b>FINISH!</b><span>${fmt(t)}${pen?` (incl. +${pen.toFixed(1)}s)`:''}<br>${Math.round(car.vf*3.6)} km/h at the line<br>top ${Math.round(topV*3.6)} · avg ${Math.round(L/raceT*3.6)} km/h</span>`;ui(['res'],1);ui(['steer','gas','brk','hb'],0);K.gas=K.brk=K.hb=0}
+          function toMenu(){S='menu';reset();ts=1;ui(['res','cock','top','lights','steer','gas','brk','hb'],0);ui(['menu'],1);$('note').style.opacity=0}
+
+          /* ---------- PHYSICS ---------- */
+          function step(dt,rdt){
+          let gas=0,brk=0,hb=0,st=0;
+          if(S==='race'){gas=K.gas;brk=K.brk;hb=K.hb;st=steerIn||kbS}else if(S==='count')hb=1;else if(S==='finish')brk=1;
+          car.st+=(st-car.st)*Math.min(1,dt*9);
+          let fx=-Math.sin(car.yaw),fz=-Math.cos(car.yaw),rx=-fz,rz=fx;
+          let [i,d]=near(car.x,car.z,car.i);car.i=i;const gy=ground(car.x,car.z,i,d),air=car.y>gy+.1,off=sm(d,4.6,7);
+          if(!air){
+           const sp0=car.vx*fx+car.vz*fz;
+           car.yaw+=-car.st*.95*Math.min(1,sp0/9)/(1+sp0*.028)*(hb?1.6:1)*dt;
+           fx=-Math.sin(car.yaw);fz=-Math.cos(car.yaw);rx=-fz;rz=fx;
+           let vf=car.vx*fx+car.vz*fz,vl=car.vx*rx+car.vz*rz;
+           let a=gas*26*(1-Math.max(0,vf)/50)-(vf>0?.6+vf*.02:0);
+           if(brk&&vf>0)a-=36;if(hb&&vf>0)a-=7;a-=vf*.35*off;
+           vf+=a*dt;if(vf<0)vf=0;
+           vl*=Math.exp(-(hb?1.4:7.5-off*2.5)*dt);
+           car.vx=fx*vf+rx*vl;car.vz=fz*vf+rz*vl;
+          }
+          car.x+=car.vx*dt;car.z+=car.vz*dt;
+          [i,d]=near(car.x,car.z,car.i);car.i=i;
+          const g2=ground(car.x,car.z,i,d),wasAir=air;car.vy-=22*dt;car.y+=car.vy*dt;
+          if(car.y<=g2){const imp=car.vy;car.y=g2;car.vy=Math.max(-5,Math.min(14,(g2-car.pg)/dt));
+           if(wasAir&&imp<-6){const k=Math.min(1,-imp/14);shake=Math.max(shake,k);car.vx*=1-.12*k;car.vz*=1-.12*k;clap(2,.1)}}
+          car.pg=g2;
+          const vf2=car.vx*fx+car.vz*fz;car.vf=vf2;topV=Math.max(topV,vf2);
+          const lat=car.vx*rx+car.vz*rz;
+          const pt2=air?Math.atan2(car.vy,Math.max(8,vf2))*.9:Math.atan2(ground(car.x+fx*5,car.z+fz*5,i,d)-g2,5);
+          car.pitch+=(pt2-car.pitch)*Math.min(1,dt*6);car.roll+=((-car.st*.05-lat*.012)-car.roll)*Math.min(1,dt*5);
+          shake*=Math.exp(-4*dt);
+          if(S==='race'){
+           raceT+=dt;offT-=dt;
+           if(d>4.9&&offT<=0){addPen(2);offT=2.5}
+           if(d>30){addPen(10);car.x=PX[i];car.z=PZ[i];car.yaw=Y[i];car.vx=car.vz=car.vy=0;car.y=car.pg=ground(car.x,car.z,i,0)}
+           const look=(55+vf2*2.2)/STEP;while(noteI<notes.length&&car.i+look>=notes[noteI].i){if(car.i<notes[noteI].i+10)say(notes[noteI].t);noteI++}
+           if(car.i>=FIN)finish()}
+          simT+=dt;
+          for(const c of crowd){const dist=Math.abs(car.i-c.i)*STEP,ch=1-sm(dist,10,70);
+           if(!c.done&&car.i>=c.i-18&&car.i<c.i+30&&S==='race'){c.done=1;clap()}
+           for(const p of c.p)p.g.position.y=p.y+ch*Math.abs(Math.sin(simT*9+p.ph))*.35}
+          if(AC&&eng){const rpm=(vf2%11)/11*.7+.25;eng.frequency.value=38+rpm*110+(gas?15:0);engG.gain.value=S==='menu'?0:.03+gas*.03}
+          }
+
+          /* ---------- COCKPIT ---------- */
+          function gauge(x,y,r,f,txt){c2.fillStyle='#050505';c2.beginPath();c2.arc(x,y,r*1.12,0,7);c2.fill();c2.fillStyle='#f3f1ea';c2.beginPath();c2.arc(x,y,r,0,7);c2.fill();
+          c2.strokeStyle='#222';c2.lineWidth=2;for(let k=0;k<=8;k++){const a=Math.PI*.75+k/8*Math.PI*1.5;c2.beginPath();c2.moveTo(x+Math.cos(a)*r*.82,y+Math.sin(a)*r*.82);c2.lineTo(x+Math.cos(a)*r*.95,y+Math.sin(a)*r*.95);c2.stroke()}
+          const a=Math.PI*.75+Math.min(1,f)*Math.PI*1.5;c2.strokeStyle='#e8330c';c2.lineWidth=3;c2.beginPath();c2.moveTo(x,y);c2.lineTo(x+Math.cos(a)*r*.85,y+Math.sin(a)*r*.85);c2.stroke();
+          if(txt){c2.fillStyle='#111';c2.font=`700 ${r*.32}px sans-serif`;c2.textAlign='center';c2.fillText(txt,x,y+r*.6)}}
+          function poly(p){c2.beginPath();p.forEach((q,k)=>k?c2.lineTo(q[0],q[1]):c2.moveTo(q[0],q[1]));c2.fill()}
+          function cockpit(){const W=innerWidth,H=innerHeight;c2.setTransform(cx.width/W,0,0,cx.height/H,0,0);c2.clearRect(0,0,W,H);
+          c2.fillStyle='#14110f';c2.fillRect(0,0,W,H*.06);
+          c2.fillStyle='#d9540f';poly([[0,0],[W*.13,0],[W*.03,H*.62],[0,H*.62]]);poly([[W,0],[W*.87,0],[W*.97,H*.62],[W,H*.62]]);
+          c2.fillStyle='#16130f';c2.beginPath();c2.moveTo(0,H*.8);c2.quadraticCurveTo(W*.5,H*.66,W,H*.8);c2.lineTo(W,H);c2.lineTo(0,H);c2.fill();
+          c2.strokeStyle='#d9540f';c2.lineWidth=3;c2.beginPath();c2.moveTo(0,H*.8);c2.quadraticCurveTo(W*.5,H*.66,W,H*.8);c2.stroke();
+          const kmh=car.vf*3.6,rpm=(car.vf%11)/11*.7+.25;
+          gauge(W*.5-H*.2,H*.79,H*.11,kmh/200,Math.round(kmh)+'');gauge(W*.5+H*.2,H*.79,H*.11,rpm,'');gauge(W*.5-H*.38,H*.84,H*.06,.4+Math.sin(simT)*.02,'');gauge(W*.5+H*.38,H*.84,H*.06,.5,'');
+          const wx=W*.5,wy=H*1.0,Rr=H*.34,rot=car.st*1.4,hs=[-Math.PI/2-.65,-Math.PI/2+.65],hp=hs.map(a=>[wx+Math.cos(a+rot)*Rr,wy+Math.sin(a+rot)*Rr]);
+          c2.lineCap='round';c2.strokeStyle='#262626';c2.lineWidth=H*.09;hp.forEach((q,k)=>{c2.beginPath();c2.moveTo(q[0],q[1]);c2.lineTo(W*.5+(k?1:-1)*W*.22,H*1.15);c2.stroke()});
+          c2.save();c2.translate(wx,wy);c2.rotate(rot);c2.strokeStyle='#1a1a1a';c2.lineWidth=H*.05;c2.beginPath();c2.arc(0,0,Rr,0,7);c2.stroke();
+          c2.lineWidth=H*.045;c2.beginPath();c2.moveTo(-Rr,0);c2.lineTo(Rr,0);c2.moveTo(0,0);c2.lineTo(0,Rr);c2.stroke();
+          c2.fillStyle='#ff8a1a';c2.fillRect(-H*.012,-Rr-H*.03,H*.024,H*.06);c2.restore();
+          c2.fillStyle='#e9bf9a';hp.forEach(q=>{c2.beginPath();c2.ellipse(q[0],q[1],H*.05,H*.038,0,0,7);c2.fill()})}
+
+          /* ---------- LOOP ---------- */
+          let last=performance.now();
+          function loop(now){requestAnimationFrame(loop);const rdt=Math.min(.05,(now-last)/1000);last=now;
+          ts+=((S==='finish'?.25:1)-ts)*Math.min(1,rdt*3);const dt=rdt*ts;
+          if(S==='count'||S==='race'){cT+=rdt;const n=Math.min(3,Math.floor(cT)),ls=$('lights').children;
+           if(S==='count'){for(let k=0;k<3;k++)ls[k].className=k<n?'r':'';if(cT>=4){for(const l of ls)l.className='g';S='race';say("Go go go! Nice and smooth")}}
+           if(cT>=5.5)ui(['lights'],0)}
+          if(S==='finish'){finRT+=rdt;if(finRT>6)toMenu()}
+          if(S!=='menu')step(dt,rdt);else simT+=rdt;
+          const fx=-Math.sin(car.yaw),fz=-Math.cos(car.yaw),sk=shake*.25+(S==='menu'?0:Math.min(.02,car.vf*.0004));
+          cam.position.set(car.x+fx*.3+(Math.random()-.5)*sk,car.y+1.15+(Math.random()-.5)*sk,car.z+fz*.3);
+          cam.rotation.set(car.pitch+(S==='menu'?-.05:0),car.yaw+(S==='menu'?Math.sin(simT*.3)*.15:0),car.roll,'YXZ');
+          cam.fov=72+car.vf*.2;cam.updateProjectionMatrix();
+          R.render(scene,cam);
+          if(S!=='menu'){cockpit();if(S==='race')$('tm').textContent=fmt(raceT+pen);if(S==='finish')$('tm').textContent=fmt(raceT+pen);
+           $('steer').firstElementChild.nextElementSibling.style.left=(50+car.st*40)+'%'}}
+          requestAnimationFrame(loop);
+          </script></body></html>
+          EOF_GAME
+          # >>>>>>>>>> GAME CODE ENDS HERE <<<<<<<<<<
+          curl -fL -o src/main/assets/three.min.js https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
+          sed -i 's#https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js#three.min.js#' src/main/assets/index.html
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rally-test-apk
+          path: build/outputs/apk/debug/*.apk
